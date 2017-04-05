@@ -4,21 +4,12 @@ var fs = require('fs');
 var http = require('http');
 var io = require('socket.io');
 
-var UDP_HOST = '127.0.0.1',
-    UDP_PORT = 8888,
-    SERVER_HOST = '127.0.0.1',
+var UDP_HOST = '0.0.0.0',
+    UDP_PORT = 8893,
+    SERVER_HOST = '0.0.0.0',
     SERVER_PORT = 8880,
     HTDOCS_PATH = '/htdocs';
 
-
-
-/**
- * A client of the UDP server that will be broadcasting packets of
- * channel data from the OpenBCI board.
- * @param {number} port The port to connect to.
- * @param {string} host The host to connect to.
- * @constructor
- */
 function UDPClient(port, host) {
   this.port = port;
   this.host = host;
@@ -28,26 +19,15 @@ function UDPClient(port, host) {
   this.connection.on('listening', this.onListening.bind(this));
   this.connection.on('message', this.onMessage.bind(this));
   this.connection.bind(this.port, this.host);
-};
+}
 
-
-/**
- * Handler for when the connection is opened.
- */
 UDPClient.prototype.onListening = function() {
   console.log('Listening for data...');
 };
 
-
-/**
- * Handler for when a message is received.
- * @param {string} message The message that was received.
- */
 UDPClient.prototype.onMessage = function(msg) {
   this.events.emit('sample', JSON.parse(msg.toString()));
 };
-
-
 
 function OpenBCIServer(host, port, htdocs) {
   this.host = host;
@@ -58,7 +38,7 @@ function OpenBCIServer(host, port, htdocs) {
 
   this.socket.on('connection', this.onSocketConnect.bind(this));
   this.server.listen(this.port, this.host)
-};
+}
 
 OpenBCIServer.prototype.onRequest = function(req, res) {
   this.serveStatic(req, res);
@@ -87,8 +67,15 @@ OpenBCIServer.prototype.onSocketConnect = function(socket) {
 };
 
 var client = new UDPClient(UDP_PORT, UDP_HOST);
+var noise_data = new UDPClient(UDP_PORT+1, UDP_HOST);
 var server = new OpenBCIServer(SERVER_HOST, SERVER_PORT, HTDOCS_PATH);
 
 client.events.on('sample', function(data) {
-  server.socket.sockets.emit('openbci', data);
+    console.log("sending from sample...");
+    server.socket.sockets.emit('openbci', data);
+});
+
+noise_data.events.on('sample', function(data) {
+    console.log("sending from sample...noise ");
+    server.socket.sockets.emit('openbci_noise', data);
 });

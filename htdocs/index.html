@@ -6,44 +6,194 @@ canvas {
   display: block;
 }
 
- 
+ .progress-meter .background {
+     fill: #ccc;
+ }
+
+.progress-meter .foreground {
+    fill: #000;
+}
+
+.progress-meter text {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 24px;
+    font-weight: bold;
+}
+
 </style>
+<head>
+    <link href="./css/bootstrap.min.css" rel="stylesheet">
+    <link href="./css/grid.css" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="./js/smoothie.js"></script>
+    <script src="./js/d3.v3.min.js"></script>
+    <script src="./js/jquery-3.2.0.min.js"></script>
+</head>
+
 <body>
-<script src="/socket.io/socket.io.js"></script>
-<script src="http://smoothiecharts.org/smoothie.js"></script>
+
+
+<div class="row" id="bciSignals">
+
+</div>
+
+<div class="row">
+    <div class="col-md-4" id="angle1"  align="center"></div>
+    <div class="col-md-4" id="angle2"  align="center"></div>
+    <div class="col-md-4" id="angle3"  align="center"></div>
+</div>
+
 <script>
 
-function Timeline() {
-  this.data = new TimeSeries();
-  this.chart = new SmoothieChart();
-  this.chart.addTimeSeries(this.data, { strokeStyle: 'rgba(0, 255, 0, 1)', fillStyle: 'rgba(0, 255, 0, 0.2)', lineWidth: 1 });
-  var chartEl = document.createElement("CANVAS");
-  chartEl.setAttribute("width", "400");
-  chartEl.setAttribute("height", "200");
-  this.chart.streamTo(chartEl, 500);
-  document.body.appendChild(chartEl);
+function Timeline(number) {
+
+      this.data = new TimeSeries();
+      this.chart = new SmoothieChart();
+      this.chart.addTimeSeries(this.data, { strokeStyle: 'rgba(0, 255, 0, 1)', fillStyle: 'rgba(0, 255, 0, 0.2)', lineWidth: 1 });
+      $("#bciSignals").append("<div class='col-md-3'  align='center'><canvas id='openbci"+number+"' style='width:400px;height:200px'></canvas></div>");
+      var chartEl = document.getElementById("openbci"+number);
+        chartEl.width  = 400;
+        chartEl.height = 200;
+      this.chart.streamTo(chartEl, 500);
 }
 
 Timeline.prototype.sample = function (s) {
   this.data.append(new Date().getTime(), s);
-}
+};
 
 
 var waves = [];
-for (var i = 0; i < 8; i++) {
-  waves.push(new Timeline());
+for (var i = 0; i < 16; i++) {
+  waves.push(new Timeline(i));
 }
 
 var process = 1;
+var process_kinet = 1;
+var arm_angle = [];
+arm_angle[0] = 34;
+arm_angle[1] = 67;
+arm_angle[2] = 89;
+
+
+var angleOne = addCycle("angle1", arm_angle, 0);
+var angleTwo = addCycle("angle2", arm_angle, 1);
+var angleThree = addCycle("angle3", arm_angle, 2);
+
+
+d3.select("#angle1").on(function(){
+
+});
+
 
 var socket = io.connect('http://127.0.0.1');
 socket.on('openbci', function (sample) {
-  if (process % 3 == 0) {
-    for (var i = 0; i < 8; i++) {
-        waves[i].sample(sample[i]);
+
+    for (var i = 0; i < sample.length; i++) {
+        console.log(sample[i].length);
+        for (var f=0; f< sample[i].length; f++){
+            waves[i].sample(sample[i][f]);
+        }
+
     }
-    process = 1;
-  }
-  process++;
+//    if(sample.length>8){
+//        for (var i = 8; i < 11; i++) {
+//            console.log();
+//            arm_angle[i-8] = sample[i];
+//        }
+//    }
 });
+
+socket.on('openbci_noise', function (sample) {
+
+    for (var i = 8; i < sample.length+8; i++) {
+        console.log(sample[i-8].length);
+        for (var f=0; f< sample[i-8].length; f++){
+            waves[i].sample(sample[i-8][f]);
+        }
+
+    }
+//    if(sample.length>8){
+//        for (var i = 8; i < 11; i++) {
+//            console.log();
+//            arm_angle[i-8] = sample[i];
+//        }
+//    }
+});
+
+
+function addCycle(placeholder, angle, index){
+
+    var width = 400,
+        height = 400,
+        τ = 2 * Math.PI,
+        formatPercent = d3.format(".0%");
+
+    var arc = d3.svg.arc()
+        .innerRadius(90)
+        .outerRadius(150)
+        .startAngle(0);
+
+    var svg = d3.select("#"+placeholder).append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .append("g")
+        .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+
+    // Add the background arc, from 0 to 100% (τ).
+    var background = svg.append("path")
+        .datum({
+            endAngle: τ,
+            startAngle: 0
+        })
+        .style("fill", "#ddd")
+        .attr("d", arc);
+
+    var meter = svg.append("g")
+        .attr("class", "progress-meter");
+
+    meter.append("path")
+        .attr("class", "background")
+        .attr("d", arc.endAngle(2 * Math.PI));
+
+    var text = meter.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dy", ".35em");
+
+    // Add the foreground arc in orange, currently showing 12.7%.
+    var foreground = svg.append("path")
+        .datum({
+            endAngle: .127 * τ,
+            startAngle: -.127 * τ
+        })
+        .style("fill", "orange")
+        .attr("d", arc);
+
+    setInterval(function () {
+        foreground.transition()
+            .duration(750)
+            .call(arcTween, 0, angle[index]);
+        text.text(formatPercent(angle[index]));
+    }, 1500);
+
+    function arcTween(transition, newStartAngle, newFinishAngle) {
+
+        transition.attrTween("d", function (d) {
+            var interpolateStart = d3.interpolate(d.startAngle, newStartAngle);
+            var interpolateEnd = d3.interpolate(d.endAngle, newFinishAngle);
+            return function (t) {
+                d.startAngle = interpolateStart(t);
+                d.endAngle = interpolateEnd(t);
+                return arc(d);
+            };
+        });
+    }
+}
+
+function getRandomInteger(min, max) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min)) + min;
+}
+
 </script>
+
